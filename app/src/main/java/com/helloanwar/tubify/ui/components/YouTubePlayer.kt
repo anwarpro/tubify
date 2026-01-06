@@ -43,86 +43,101 @@ fun YouTubePlayer(
     var playerView by remember { mutableStateOf<YouTubePlayerView?>(null) }
     var fullScreenView by remember { mutableStateOf<View?>(null) }
 
-    AndroidView(
-        modifier = modifier,
-        factory = { ctx ->
-            YouTubePlayerView(ctx).apply {
-                playerView = this
-                // CRITICAL: Disable automatic initialization to manually control lifecycle
-                enableAutomaticInitialization = false
-                // Enable background playback
-                enableBackgroundPlayback(true)
+    // Force recreation when switching to/from a playlist or between playlists
+    // This allows IFramePlayerOptions to be re-applied correctly
+    val key = remember(playerSource) {
+        if (playerSource is PlayerSource.Playlist) "playlist_${playerSource.playlistId}"
+        else "video_player" // Keep same player for video-to-video transitions if desired
+    }
 
-                val options = IFramePlayerOptions.Builder(ctx)
-                    .controls(1)
-                    .fullscreen(1)
-                    .autoplay(1)
-                    .ivLoadPolicy(3)
-                    .apply {
-                        if (playerSource is PlayerSource.Playlist) {
-                            this.listType("playlist")
-                                .list(playerSource.playlistId)
+    androidx.compose.runtime.key(key) {
+        AndroidView(
+            modifier = modifier,
+            factory = { ctx ->
+                YouTubePlayerView(ctx).apply {
+                    playerView = this
+                    // CRITICAL: Disable automatic initialization to manually control lifecycle
+                    enableAutomaticInitialization = false
+                    // Enable background playback
+                    enableBackgroundPlayback(true)
+
+                    val options = IFramePlayerOptions.Builder(ctx)
+                        .controls(1)
+                        .fullscreen(1)
+                        .autoplay(1)
+                        .ivLoadPolicy(3)
+                        .apply {
+                            if (playerSource is PlayerSource.Playlist) {
+                                this.listType("playlist")
+                                    .list(playerSource.playlistId)
+                            }
+                        }
+                        .build()
+
+                    val listener = object : AbstractYouTubePlayerListener() {
+                        override fun onReady(player: YouTubePlayer) {
+                            youTubePlayer = player
+                            playerController?.setPlayer(player)
+                            // Initial load only if it's a video. 
+                            // Playlist is handled by IFramePlayerOptions.
+                            if (playerSource is PlayerSource.Video) {
+                                loadSource(player, playerSource)
+                            }
+                        }
+
+                        override fun onStateChange(
+                            player: YouTubePlayer,
+                            state: com.pierfrancescosoffritti.androidyoutubeplayer.core.player.PlayerConstants.PlayerState
+                        ) {
+                            when (state) {
+                                com.pierfrancescosoffritti.androidyoutubeplayer.core.player.PlayerConstants.PlayerState.PLAYING -> onStateChange(true)
+                                com.pierfrancescosoffritti.androidyoutubeplayer.core.player.PlayerConstants.PlayerState.PAUSED,
+                                com.pierfrancescosoffritti.androidyoutubeplayer.core.player.PlayerConstants.PlayerState.ENDED -> onStateChange(false)
+                                else -> {} 
+                            }
                         }
                     }
-                    .build()
 
-                val listener = object : AbstractYouTubePlayerListener() {
-                    override fun onReady(player: YouTubePlayer) {
-                        youTubePlayer = player
-                        playerController?.setPlayer(player)
-                        // Initial load
-                        loadSource(player, playerSource)
-                    }
+                    // Initialize without passing the lifecycle to the view itself.
+                    // This prevents the view from automatically pausing the player onStop.
+                    initialize(listener, options)
 
-                    override fun onStateChange(
-                        player: YouTubePlayer,
-                        state: com.pierfrancescosoffritti.androidyoutubeplayer.core.player.PlayerConstants.PlayerState
-                    ) {
-                        when (state) {
-                            com.pierfrancescosoffritti.androidyoutubeplayer.core.player.PlayerConstants.PlayerState.PLAYING -> onStateChange(true)
-                            com.pierfrancescosoffritti.androidyoutubeplayer.core.player.PlayerConstants.PlayerState.PAUSED,
-                            com.pierfrancescosoffritti.androidyoutubeplayer.core.player.PlayerConstants.PlayerState.ENDED -> onStateChange(false)
-                            else -> {} 
-                        }
-                    }
-                }
-
-                // Initialize without passing the lifecycle to the view itself.
-                // This prevents the view from automatically pausing the player onStop.
-                initialize(listener, options)
-
-                // Optional: Restore fullscreen listener if needed
-                addFullscreenListener(object : FullscreenListener {
-                    override fun onEnterFullscreen(view: View, exitFullscreen: () -> Unit) {
-                        val decor = activity?.window?.decorView as? ViewGroup
-                        decor?.addView(
-                            view, ViewGroup.LayoutParams(
-                                ViewGroup.LayoutParams.MATCH_PARENT,
-                                ViewGroup.LayoutParams.MATCH_PARENT
+                    // Optional: Restore fullscreen listener if needed
+                    addFullscreenListener(object : FullscreenListener {
+                        override fun onEnterFullscreen(view: View, exitFullscreen: () -> Unit) {
+                            val decor = activity?.window?.decorView as? ViewGroup
+                            decor?.addView(
+                                view, ViewGroup.LayoutParams(
+                                    ViewGroup.LayoutParams.MATCH_PARENT,
+                                    ViewGroup.LayoutParams.MATCH_PARENT
+                                )
                             )
-                        )
-                        fullScreenView = view
-                    }
+                            fullScreenView = view
+                        }
 
-                    override fun onExitFullscreen() {
-                        val decor = activity?.window?.decorView as? ViewGroup
-                        fullScreenView?.let { decor?.removeView(it) }
-                        fullScreenView = null
-                    }
-                })
+                        override fun onExitFullscreen() {
+                            val decor = activity?.window?.decorView as? ViewGroup
+                            fullScreenView?.let { decor?.removeView(it) }
+                            fullScreenView = null
+                        }
+                    })
+                }
+            },
+            onRelease = {
+                // AndroidView's onRelease is called when the View is detached.
+                // equivalent to onDispose logic often.
+                it.release()
             }
-        },
-        onRelease = {
-            // AndroidView's onRelease is called when the View is detached.
-            // equivalent to onDispose logic often.
-            it.release()
-        }
-    )
+        )
+    }
 
-    // React to source changes
+    // React to source changes ONLY for Video-to-Video
+    // (Playlist changes will trigger outer key recreation)
     LaunchedEffect(playerSource) {
-        youTubePlayer?.let { player ->
-            loadSource(player, playerSource)
+        if (playerSource is PlayerSource.Video) {
+             youTubePlayer?.let { player ->
+                loadSource(player, playerSource)
+            }
         }
     }
 

@@ -4,35 +4,30 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.viewModels
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.Button
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.tooling.preview.Preview
-import com.helloanwar.tubify.ui.theme.TubifyTheme
-import com.helloanwar.tubify.utils.VideoIdsProvider
-import com.helloanwar.tubify.ui.components.YouTubePlayer
-import com.helloanwar.tubify.ui.components.PlayerSource
-import com.helloanwar.tubify.data.local.database.AppDatabase
-import com.helloanwar.tubify.data.repository.VideoRepository
-import com.helloanwar.tubify.data.local.entity.VideoEntity
-import com.helloanwar.tubify.data.local.entity.PlaylistEntity
 import androidx.lifecycle.lifecycleScope
-import kotlinx.coroutines.launch
-import androidx.activity.viewModels
-import androidx.lifecycle.ViewModel
-import androidx.lifecycle.ViewModelProvider
+import com.helloanwar.tubify.data.local.database.AppDatabase
+import com.helloanwar.tubify.data.local.entity.PlaylistEntity
+import com.helloanwar.tubify.data.local.entity.VideoEntity
+import com.helloanwar.tubify.data.repository.VideoRepository
+import com.helloanwar.tubify.ui.components.PlayerSource
+import com.helloanwar.tubify.ui.components.YouTubePlayer
 import com.helloanwar.tubify.ui.screens.LibraryScreen
+import com.helloanwar.tubify.ui.theme.TubifyTheme
 import com.helloanwar.tubify.ui.viewmodel.MainViewModel
 import com.helloanwar.tubify.ui.viewmodel.MainViewModelFactory
+import com.helloanwar.tubify.utils.VideoIdsProvider
+import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
 
@@ -47,12 +42,24 @@ class MainActivity : ComponentActivity() {
         MainViewModelFactory(repository)
     }
 
+    private lateinit var userPreferences: com.helloanwar.tubify.data.local.UserPreferences
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
 
         database = AppDatabase.getDatabase(this)
         repository = VideoRepository(database.videoDao(), database.playlistDao())
+        userPreferences = com.helloanwar.tubify.data.local.UserPreferences(this)
+
+        // Load initial state from preferences
+        val lastType = userPreferences.lastPlayedType
+        val lastId = userPreferences.lastPlayedId
+        if (lastType == com.helloanwar.tubify.data.local.UserPreferences.TYPE_PLAYLIST) {
+            _playerSource.value = PlayerSource.Playlist(lastId)
+        } else {
+            _playerSource.value = PlayerSource.Video(lastId)
+        }
 
         mediaSessionManager = com.helloanwar.tubify.utils.MediaSessionManager(
             context = this,
@@ -89,9 +96,13 @@ class MainActivity : ComponentActivity() {
                             viewModel = mainViewModel,
                             onVideoClick = { videoId ->
                                 _playerSource.value = PlayerSource.Video(videoId)
+                                userPreferences.lastPlayedType = com.helloanwar.tubify.data.local.UserPreferences.TYPE_VIDEO
+                                userPreferences.lastPlayedId = videoId
                             },
                             onPlaylistClick = { playlistId ->
                                 _playerSource.value = PlayerSource.Playlist(playlistId)
+                                userPreferences.lastPlayedType = com.helloanwar.tubify.data.local.UserPreferences.TYPE_PLAYLIST
+                                userPreferences.lastPlayedId = playlistId
                             }
                         )
                     }
@@ -118,12 +129,16 @@ class MainActivity : ComponentActivity() {
 
                 if (videoId != null) {
                     _playerSource.value = PlayerSource.Video(videoId)
+                    userPreferences.lastPlayedType = com.helloanwar.tubify.data.local.UserPreferences.TYPE_VIDEO
+                    userPreferences.lastPlayedId = videoId
                     lifecycleScope.launch {
                         repository.insertVideo(VideoEntity(id = videoId, title = "Shared Video"))
                         android.util.Log.d("TubifyDB", "Saved video: $videoId")
                     }
                 } else if (playlistId != null) {
                     _playerSource.value = PlayerSource.Playlist(playlistId)
+                    userPreferences.lastPlayedType = com.helloanwar.tubify.data.local.UserPreferences.TYPE_PLAYLIST
+                    userPreferences.lastPlayedId = playlistId
                     lifecycleScope.launch {
                         repository.insertPlaylist(PlaylistEntity(id = playlistId, title = "Shared Playlist"))
                         android.util.Log.d("TubifyDB", "Saved playlist: $playlistId")
