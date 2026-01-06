@@ -21,16 +21,38 @@ import com.helloanwar.tubify.ui.theme.TubifyTheme
 import com.helloanwar.tubify.utils.VideoIdsProvider
 import com.helloanwar.tubify.ui.components.YouTubePlayer
 import com.helloanwar.tubify.ui.components.PlayerSource
+import com.helloanwar.tubify.data.local.database.AppDatabase
+import com.helloanwar.tubify.data.repository.VideoRepository
+import com.helloanwar.tubify.data.local.entity.VideoEntity
+import com.helloanwar.tubify.data.local.entity.PlaylistEntity
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.launch
+import androidx.activity.viewModels
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.ViewModelProvider
+import com.helloanwar.tubify.ui.screens.LibraryScreen
+import com.helloanwar.tubify.ui.viewmodel.MainViewModel
+import com.helloanwar.tubify.ui.viewmodel.MainViewModelFactory
 
 class MainActivity : ComponentActivity() {
 
     private val _playerSource = mutableStateOf<PlayerSource>(PlayerSource.Video(VideoIdsProvider.nextVideoId))
     private val _playerController = com.helloanwar.tubify.ui.components.PlayerController()
     private var mediaSessionManager: com.helloanwar.tubify.utils.MediaSessionManager? = null
+    
+    private lateinit var database: AppDatabase
+    private lateinit var repository: VideoRepository
+    
+    private val mainViewModel: MainViewModel by viewModels {
+        MainViewModelFactory(repository)
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+
+        database = AppDatabase.getDatabase(this)
+        repository = VideoRepository(database.videoDao(), database.playlistDao())
 
         mediaSessionManager = com.helloanwar.tubify.utils.MediaSessionManager(
             context = this,
@@ -63,11 +85,15 @@ class MainActivity : ComponentActivity() {
                             }
                         )
 
-                        Button(onClick = {
-                            _playerSource.value = PlayerSource.Video(VideoIdsProvider.nextVideoId)
-                        }) {
-                            Text("Play next video")
-                        }
+                        LibraryScreen(
+                            viewModel = mainViewModel,
+                            onVideoClick = { videoId ->
+                                _playerSource.value = PlayerSource.Video(videoId)
+                            },
+                            onPlaylistClick = { playlistId ->
+                                _playerSource.value = PlayerSource.Playlist(playlistId)
+                            }
+                        )
                     }
                 }
             }
@@ -92,8 +118,16 @@ class MainActivity : ComponentActivity() {
 
                 if (videoId != null) {
                     _playerSource.value = PlayerSource.Video(videoId)
+                    lifecycleScope.launch {
+                        repository.insertVideo(VideoEntity(id = videoId, title = "Shared Video"))
+                        android.util.Log.d("TubifyDB", "Saved video: $videoId")
+                    }
                 } else if (playlistId != null) {
                     _playerSource.value = PlayerSource.Playlist(playlistId)
+                    lifecycleScope.launch {
+                        repository.insertPlaylist(PlaylistEntity(id = playlistId, title = "Shared Playlist"))
+                        android.util.Log.d("TubifyDB", "Saved playlist: $playlistId")
+                    }
                 }
             }
         }
