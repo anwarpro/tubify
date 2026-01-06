@@ -20,22 +20,52 @@ import androidx.compose.ui.tooling.preview.Preview
 import com.helloanwar.tubify.ui.theme.TubifyTheme
 import com.helloanwar.tubify.utils.VideoIdsProvider
 import com.helloanwar.tubify.ui.components.YouTubePlayer
+import com.helloanwar.tubify.ui.components.PlayerSource
 
 class MainActivity : ComponentActivity() {
+
+    private val _playerSource = mutableStateOf<PlayerSource>(PlayerSource.Video(VideoIdsProvider.nextVideoId))
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+
+        // Handle initial intent
+        handleIntent(intent)
+
         setContent {
             TubifyTheme {
                 Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
-                    var videoId by remember { mutableStateOf(VideoIdsProvider.nextVideoId) }
+                    val playerSource by remember { _playerSource }
                     Column(modifier = Modifier.padding(innerPadding)) {
-                        YouTubePlayer(videoId = videoId)
+                        YouTubePlayer(playerSource = playerSource)
 
-                        Button(onClick = { videoId = VideoIdsProvider.nextVideoId }) {
+                        Button(onClick = {
+                            _playerSource.value = PlayerSource.Video(VideoIdsProvider.nextVideoId)
+                        }) {
                             Text("Play next video")
                         }
                     }
+                }
+            }
+        }
+    }
+
+    override fun onNewIntent(intent: android.content.Intent) {
+        super.onNewIntent(intent)
+        handleIntent(intent)
+    }
+
+    private fun handleIntent(intent: android.content.Intent?) {
+        if (intent?.action == android.content.Intent.ACTION_SEND && intent.type == "text/plain") {
+            intent.getStringExtra(android.content.Intent.EXTRA_TEXT)?.let { sharedText ->
+                val videoId = com.helloanwar.tubify.utils.YouTubeUrlParser.getVideoId(sharedText)
+                val playlistId = com.helloanwar.tubify.utils.YouTubeUrlParser.getPlaylistId(sharedText)
+
+                if (videoId != null) {
+                    _playerSource.value = PlayerSource.Video(videoId)
+                } else if (playlistId != null) {
+                    _playerSource.value = PlayerSource.Playlist(playlistId)
                 }
             }
         }
@@ -50,6 +80,6 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun GreetingPreview() {
     TubifyTheme {
-        YouTubePlayer(videoId = "")
+        YouTubePlayer(playerSource = com.helloanwar.tubify.ui.components.PlayerSource.Video(""))
     }
 }

@@ -20,9 +20,14 @@ import com.pierfrancescosoffritti.androidyoutubeplayer.core.player.listeners.Ful
 import com.pierfrancescosoffritti.androidyoutubeplayer.core.player.options.IFramePlayerOptions
 import com.pierfrancescosoffritti.androidyoutubeplayer.core.player.views.YouTubePlayerView
 
+sealed interface PlayerSource {
+    data class Video(val videoId: String) : PlayerSource
+    data class Playlist(val playlistId: String) : PlayerSource
+}
+
 @Composable
 fun YouTubePlayer(
-    videoId: String,
+    playerSource: PlayerSource,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -49,15 +54,21 @@ fun YouTubePlayer(
                 val options = IFramePlayerOptions.Builder(ctx)
                     .controls(1)
                     .fullscreen(1)
-                    .autoplay(1) 
+                    .autoplay(1)
                     .ivLoadPolicy(3)
+                    .apply {
+                        if (playerSource is PlayerSource.Playlist) {
+                            this.listType("playlist")
+                                .list(playerSource.playlistId)
+                        }
+                    }
                     .build()
 
                 val listener = object : AbstractYouTubePlayerListener() {
                     override fun onReady(player: YouTubePlayer) {
                         youTubePlayer = player
                         // Initial load
-                        player.loadVideo(videoId, 0f)
+                        loadSource(player, playerSource)
                     }
                 }
 
@@ -66,13 +77,15 @@ fun YouTubePlayer(
                 initialize(listener, options)
 
                 // Optional: Restore fullscreen listener if needed
-                 addFullscreenListener(object : FullscreenListener {
+                addFullscreenListener(object : FullscreenListener {
                     override fun onEnterFullscreen(view: View, exitFullscreen: () -> Unit) {
                         val decor = activity?.window?.decorView as? ViewGroup
-                        decor?.addView(view, ViewGroup.LayoutParams(
-                            ViewGroup.LayoutParams.MATCH_PARENT,
-                            ViewGroup.LayoutParams.MATCH_PARENT
-                        ))
+                        decor?.addView(
+                            view, ViewGroup.LayoutParams(
+                                ViewGroup.LayoutParams.MATCH_PARENT,
+                                ViewGroup.LayoutParams.MATCH_PARENT
+                            )
+                        )
                         fullScreenView = view
                     }
 
@@ -85,22 +98,24 @@ fun YouTubePlayer(
             }
         },
         onRelease = {
-             // AndroidView's onRelease is called when the View is detached. 
-             // equivalent to onDispose logic often.
-             it.release()
+            // AndroidView's onRelease is called when the View is detached.
+            // equivalent to onDispose logic often.
+            it.release()
         }
     )
 
-    // React to videoId changes
-    LaunchedEffect(videoId) {
-        youTubePlayer?.loadVideo(videoId, 0f)
+    // React to source changes
+    LaunchedEffect(playerSource) {
+        youTubePlayer?.let { player ->
+            loadSource(player, playerSource)
+        }
     }
 
     // Handle cleanup when Composable is disposed
     DisposableEffect(Unit) {
         onDispose {
             playerView?.release()
-            
+
             // Clean up fullscreen view if active
             fullScreenView?.let { view ->
                 val decor = activity?.window?.decorView as? ViewGroup
@@ -111,9 +126,19 @@ fun YouTubePlayer(
     }
 }
 
+private fun loadSource(player: YouTubePlayer, source: PlayerSource) {
+    when (source) {
+        is PlayerSource.Video -> player.loadVideo(source.videoId, 0f)
+        is PlayerSource.Playlist -> {
+            
+        }
+    }
+}
+
 // Helper extension to find Activity from Context
 private tailrec fun Context.findActivity(): ComponentActivity? = when (this) {
     is ComponentActivity -> this
     is android.content.ContextWrapper -> baseContext.findActivity()
     else -> null
 }
+
