@@ -54,6 +54,7 @@ dependencies {
     implementation(libs.androidx.compose.material3)
 
     implementation(libs.androidyoutubeplayer.core)
+    implementation("androidx.media:media:1.7.0")
 
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)

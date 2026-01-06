@@ -25,10 +25,25 @@ import com.helloanwar.tubify.ui.components.PlayerSource
 class MainActivity : ComponentActivity() {
 
     private val _playerSource = mutableStateOf<PlayerSource>(PlayerSource.Video(VideoIdsProvider.nextVideoId))
+    private val _playerController = com.helloanwar.tubify.ui.components.PlayerController()
+    private var mediaSessionManager: com.helloanwar.tubify.utils.MediaSessionManager? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+
+        mediaSessionManager = com.helloanwar.tubify.utils.MediaSessionManager(
+            context = this,
+            onPlayCallback = { _playerController.play() },
+            onPauseCallback = { _playerController.pause() },
+            onNextCallback = {
+                _playerSource.value = PlayerSource.Video(VideoIdsProvider.nextVideoId)
+            },
+            onPreviousCallback = { 
+                _playerController.seekTo(0f)
+            }
+        )
+        mediaSessionManager?.startSession()
 
         // Handle initial intent
         handleIntent(intent)
@@ -37,8 +52,16 @@ class MainActivity : ComponentActivity() {
             TubifyTheme {
                 Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
                     val playerSource by remember { _playerSource }
+                    
                     Column(modifier = Modifier.padding(innerPadding)) {
-                        YouTubePlayer(playerSource = playerSource)
+                        YouTubePlayer(
+                            playerSource = playerSource,
+                            playerController = _playerController,
+                            onStateChange = { isPlaying ->
+                                mediaSessionManager?.updateState(isPlaying)
+                                mediaSessionManager?.updateMetadata("Video Playing") // Update with actual title if available
+                            }
+                        )
 
                         Button(onClick = {
                             _playerSource.value = PlayerSource.Video(VideoIdsProvider.nextVideoId)
@@ -49,6 +72,11 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        mediaSessionManager?.release()
     }
 
     override fun onNewIntent(intent: android.content.Intent) {

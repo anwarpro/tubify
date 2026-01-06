@@ -28,7 +28,9 @@ sealed interface PlayerSource {
 @Composable
 fun YouTubePlayer(
     playerSource: PlayerSource,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    playerController: PlayerController? = null,
+    onStateChange: (Boolean) -> Unit = {}
 ) {
     val context = LocalContext.current
 
@@ -67,8 +69,21 @@ fun YouTubePlayer(
                 val listener = object : AbstractYouTubePlayerListener() {
                     override fun onReady(player: YouTubePlayer) {
                         youTubePlayer = player
+                        playerController?.setPlayer(player)
                         // Initial load
                         loadSource(player, playerSource)
+                    }
+
+                    override fun onStateChange(
+                        player: YouTubePlayer,
+                        state: com.pierfrancescosoffritti.androidyoutubeplayer.core.player.PlayerConstants.PlayerState
+                    ) {
+                        when (state) {
+                            com.pierfrancescosoffritti.androidyoutubeplayer.core.player.PlayerConstants.PlayerState.PLAYING -> onStateChange(true)
+                            com.pierfrancescosoffritti.androidyoutubeplayer.core.player.PlayerConstants.PlayerState.PAUSED,
+                            com.pierfrancescosoffritti.androidyoutubeplayer.core.player.PlayerConstants.PlayerState.ENDED -> onStateChange(false)
+                            else -> {} 
+                        }
                     }
                 }
 
