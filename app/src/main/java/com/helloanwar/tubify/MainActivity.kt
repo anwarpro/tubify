@@ -16,6 +16,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.viewModelScope
 import com.helloanwar.tubify.data.local.database.AppDatabase
 import com.helloanwar.tubify.data.local.entity.PlaylistEntity
 import com.helloanwar.tubify.data.local.entity.VideoEntity
@@ -28,6 +29,7 @@ import com.helloanwar.tubify.ui.viewmodel.MainViewModel
 import com.helloanwar.tubify.ui.viewmodel.MainViewModelFactory
 import com.helloanwar.tubify.utils.VideoIdsProvider
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.tasks.await
 
 class MainActivity : ComponentActivity() {
 
@@ -38,11 +40,33 @@ class MainActivity : ComponentActivity() {
     private lateinit var database: AppDatabase
     private lateinit var repository: VideoRepository
     
+    private lateinit var ktorClient: com.helloanwar.tubify.data.remote.KtorClient
+    private lateinit var apiService: com.helloanwar.tubify.data.remote.YouTubeApiService
+    private lateinit var authClient: com.helloanwar.tubify.data.auth.GoogleAuthClient
+    private lateinit var youtubeRepository: com.helloanwar.tubify.data.repository.YouTubeRepository
+    
     private val mainViewModel: MainViewModel by viewModels {
-        MainViewModelFactory(repository)
+        MainViewModelFactory(repository, youtubeRepository)
     }
 
     private lateinit var userPreferences: com.helloanwar.tubify.data.local.UserPreferences
+    
+    private val signInLauncher = registerForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode == RESULT_OK) {
+            val task = com.google.android.gms.auth.api.signin.GoogleSignIn.getSignedInAccountFromIntent(result.data)
+            lifecycleScope.launch {
+                 try {
+                     val account = task.await()
+                     // Auth successful, fetch playlists or token
+                     mainViewModel.fetchUserPlaylists()
+                 } catch (e: Exception) {
+                     android.util.Log.e("Auth", "Sign-in failed", e)
+                 }
+            }
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -50,6 +74,13 @@ class MainActivity : ComponentActivity() {
 
         database = AppDatabase.getDatabase(this)
         repository = VideoRepository(database.videoDao(), database.playlistDao())
+        
+        // Manual DI
+        val httpClient = com.helloanwar.tubify.data.remote.KtorClient.client
+        apiService = com.helloanwar.tubify.data.remote.YouTubeApiService(httpClient)
+        authClient = com.helloanwar.tubify.data.auth.GoogleAuthClient(this)
+        youtubeRepository = com.helloanwar.tubify.data.repository.YouTubeRepository(apiService, authClient)
+        
         userPreferences = com.helloanwar.tubify.data.local.UserPreferences(this)
 
         // Load initial state from preferences
@@ -98,11 +129,18 @@ class MainActivity : ComponentActivity() {
                                 _playerSource.value = PlayerSource.Video(videoId)
                                 userPreferences.lastPlayedType = com.helloanwar.tubify.data.local.UserPreferences.TYPE_VIDEO
                                 userPreferences.lastPlayedId = videoId
+                                mainViewModel.viewModelScope.launch {
+                                    // Optionally fetch video details here if needed
+                                     // youtubeRepository.getVideoDetails(videoId)...
+                                }
                             },
                             onPlaylistClick = { playlistId ->
                                 _playerSource.value = PlayerSource.Playlist(playlistId)
                                 userPreferences.lastPlayedType = com.helloanwar.tubify.data.local.UserPreferences.TYPE_PLAYLIST
                                 userPreferences.lastPlayedId = playlistId
+                            },
+                            onSignInClick = {
+                                signInLauncher.launch(authClient.getSignInIntent())
                             }
                         )
                     }

@@ -28,10 +28,11 @@ import com.helloanwar.tubify.ui.viewmodel.MainViewModel
 fun LibraryScreen(
     viewModel: MainViewModel,
     onVideoClick: (String) -> Unit,
-    onPlaylistClick: (String) -> Unit
+    onPlaylistClick: (String) -> Unit,
+    onSignInClick: () -> Unit
 ) {
     var selectedTabIndex by remember { mutableIntStateOf(0) }
-    val tabs = listOf("Videos", "Playlists")
+    val tabs = listOf("Videos", "Playlists", "My Playlists")
 
     Column(modifier = Modifier.fillMaxSize()) {
         TabRow(selectedTabIndex = selectedTabIndex) {
@@ -47,6 +48,7 @@ fun LibraryScreen(
         when (selectedTabIndex) {
             0 -> VideoList(viewModel = viewModel, onVideoClick = onVideoClick)
             1 -> PlaylistList(viewModel = viewModel, onPlaylistClick = onPlaylistClick)
+            2 -> UserPlaylistList(viewModel = viewModel, onPlaylistClick = onPlaylistClick, onSignInClick = onSignInClick)
         }
     }
 }
@@ -80,6 +82,34 @@ fun PlaylistList(
 }
 
 @Composable
+fun UserPlaylistList(
+    viewModel: MainViewModel,
+    onPlaylistClick: (String) -> Unit,
+    onSignInClick: () -> Unit
+) {
+    val userPlaylists by viewModel.userPlaylists.collectAsState()
+
+    Column(modifier = Modifier.fillMaxSize()) {
+        if (userPlaylists.isEmpty()) {
+            androidx.compose.material3.Button(
+                onClick = onSignInClick,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp)
+            ) {
+                Text("Sign In to view your playlists")
+            }
+        }
+
+        LazyColumn(modifier = Modifier.fillMaxSize()) {
+            items(userPlaylists) { playlist ->
+                UserPlaylistItem(playlist = playlist, onClick = { onPlaylistClick(playlist.id) })
+            }
+        }
+    }
+}
+
+@Composable
 fun VideoItem(video: VideoEntity, onClick: () -> Unit) {
     Card(
         modifier = Modifier
@@ -105,6 +135,22 @@ fun PlaylistItem(playlist: PlaylistEntity, onClick: () -> Unit) {
         Column(modifier = Modifier.padding(16.dp)) {
             Text(text = playlist.title, style = MaterialTheme.typography.titleMedium)
             Text(text = "ID: ${playlist.id}", style = MaterialTheme.typography.bodySmall)
+        }
+    }
+}
+
+@Composable
+fun UserPlaylistItem(playlist: com.helloanwar.tubify.data.remote.model.PlaylistItem, onClick: () -> Unit) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(8.dp)
+            .clickable(onClick = onClick)
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Text(text = playlist.snippet.title, style = MaterialTheme.typography.titleMedium)
+            Text(text = "ID: ${playlist.id}", style = MaterialTheme.typography.bodySmall)
+            Text(text = "Items: ${playlist.contentDetails?.itemCount ?: 0}", style = MaterialTheme.typography.bodySmall)
         }
     }
 }
