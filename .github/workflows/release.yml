@@ -1,0 +1,63 @@
+name: Build Release APK
+
+on:
+  release:
+    types: [created]
+
+jobs:
+  build:
+    name: Build Release APK
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'zulu'
+          java-version: '17'
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Extract Case and Version Info
+        id: extract_info
+        run: |
+          RELEASE_NAME="${{ github.event.release.name }}"
+          echo "Release Name: $RELEASE_NAME"
+          # Regex to match v1.0.0(10) or similar
+          if [[ $RELEASE_NAME =~ v([0-9\.]+)\(([0-9]+)\) ]]; then
+            VERSION_NAME="${BASH_REMATCH[1]}"
+            VERSION_CODE="${BASH_REMATCH[2]}"
+            echo "VERSION_NAME=$VERSION_NAME" >> $GITHUB_OUTPUT
+            echo "VERSION_CODE=$VERSION_CODE" >> $GITHUB_OUTPUT
+            echo "Extracted Version: $VERSION_NAME Code: $VERSION_CODE"
+          else
+            echo "Error: Release name format should be v1.0.0(10)"
+            exit 1
+          fi
+
+      - name: Create Keystore
+        run: |
+          echo "${{ secrets.SIGNING_KEY_STORE_BASE64 }}" | base64 --decode > release.jks
+
+      - name: Build Release APK
+        env:
+          YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
+          GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
+        run: |
+          ./gradlew assembleRelease \
+            -PVERSION_NAME="${{ steps.extract_info.outputs.VERSION_NAME }}" \
+            -PVERSION_CODE="${{ steps.extract_info.outputs.VERSION_CODE }}" \
+            -PSIGNING_STORE_FILE="../release.jks" \
+            -PSIGNING_STORE_PASSWORD="${{ secrets.SIGNING_STORE_PASSWORD }}" \
+            -PSIGNING_KEY_ALIAS="${{ secrets.SIGNING_KEY_ALIAS }}" \
+            -PSIGNING_KEY_PASSWORD="${{ secrets.SIGNING_KEY_PASSWORD }}"
+
+      - name: Upload Release Asset
+        uses: softprops/action-gh-release@v2
+        with:
+          files: app/build/outputs/apk/release/app-release.apk
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

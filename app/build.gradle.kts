@@ -19,8 +19,8 @@ android {
         applicationId = "com.helloanwar.tubify"
         minSdk = 29
         targetSdk = 36
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = project.findProperty("VERSION_CODE")?.toString()?.toInt() ?: 1
+        versionName = project.findProperty("VERSION_NAME")?.toString() ?: "1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         
@@ -30,13 +30,26 @@ android {
             localProperties.load(FileInputStream(localPropertiesFile))
         }
 
-        buildConfigField("String", "YOUTUBE_API_KEY", "\"${localProperties.getProperty("YOUTUBE_API_KEY", "")}\"")
-        buildConfigField("String", "GOOGLE_CLIENT_ID", "\"${localProperties.getProperty("GOOGLE_CLIENT_ID", "")}\"")
+        val youtubeApiKey = System.getenv("YOUTUBE_API_KEY") ?: localProperties.getProperty("YOUTUBE_API_KEY", "")
+        val googleClientId = System.getenv("GOOGLE_CLIENT_ID") ?: localProperties.getProperty("GOOGLE_CLIENT_ID", "")
+
+        buildConfigField("String", "YOUTUBE_API_KEY", "\"$youtubeApiKey\"")
+        buildConfigField("String", "GOOGLE_CLIENT_ID", "\"$googleClientId\"")
+    }
+
+    signingConfigs {
+        create("release") {
+            storeFile = project.findProperty("SIGNING_STORE_FILE")?.let { file(it) }
+            storePassword = project.findProperty("SIGNING_STORE_PASSWORD")?.toString()
+            keyAlias = project.findProperty("SIGNING_KEY_ALIAS")?.toString()
+            keyPassword = project.findProperty("SIGNING_KEY_PASSWORD")?.toString()
+        }
     }
 
     buildTypes {
         release {
             isMinifyEnabled = false
+            signingConfig = signingConfigs.getByName("release")
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
