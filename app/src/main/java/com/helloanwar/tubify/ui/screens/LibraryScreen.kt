@@ -25,8 +25,13 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.height
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.helloanwar.tubify.data.local.entity.PlaylistEntity
 import com.helloanwar.tubify.data.local.entity.VideoEntity
@@ -79,13 +84,17 @@ fun VideoList(
 ) {
     val videos by viewModel.videos.collectAsState()
 
-    LazyColumn(modifier = Modifier.fillMaxSize()) {
-        items(videos) { video ->
-            VideoItem(
-                video = video,
-                onClick = { onVideoClick(video.id) },
-                onDelete = { viewModel.deleteVideo(video) }
-            )
+    if (videos.isEmpty()) {
+        EmptyLibraryContent(type = "videos")
+    } else {
+        LazyColumn(modifier = Modifier.fillMaxSize()) {
+            items(videos) { video ->
+                VideoItem(
+                    video = video,
+                    onClick = { onVideoClick(video.id) },
+                    onDelete = { viewModel.deleteVideo(video) }
+                )
+            }
         }
     }
 }
@@ -97,12 +106,44 @@ fun PlaylistList(
 ) {
     val playlists by viewModel.playlists.collectAsState()
 
-    LazyColumn(modifier = Modifier.fillMaxSize()) {
-        items(playlists) { playlist ->
-            PlaylistItem(
-                playlist = playlist,
-                onClick = { onPlaylistClick(playlist.id) },
-                onDelete = { viewModel.deletePlaylist(playlist) }
+    if (playlists.isEmpty()) {
+        EmptyLibraryContent(type = "playlists")
+    } else {
+        LazyColumn(modifier = Modifier.fillMaxSize()) {
+            items(playlists) { playlist ->
+                PlaylistItem(
+                    playlist = playlist,
+                    onClick = { onPlaylistClick(playlist.id) },
+                    onDelete = { viewModel.deletePlaylist(playlist) }
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun EmptyLibraryContent(type: String) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(32.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
+        ) {
+            Text(
+                text = "Your $type library is empty",
+                style = MaterialTheme.typography.headlineSmall,
+                textAlign = TextAlign.Center
+            )
+            Spacer(modifier = Modifier.height(16.dp))
+            Text(
+                text = "To add $type, open YouTube, click on Share, and choose Tubify.",
+                style = MaterialTheme.typography.bodyMedium,
+                textAlign = TextAlign.Center,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
     }
