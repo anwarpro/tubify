@@ -14,6 +14,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.viewinterop.AndroidView
+import android.content.pm.ActivityInfo
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import com.pierfrancescosoffritti.androidyoutubeplayer.core.player.YouTubePlayer
 import com.pierfrancescosoffritti.androidyoutubeplayer.core.player.listeners.AbstractYouTubePlayerListener
 import com.pierfrancescosoffritti.androidyoutubeplayer.core.player.listeners.FullscreenListener
@@ -105,20 +109,41 @@ fun YouTubePlayer(
                     // Optional: Restore fullscreen listener if needed
                     addFullscreenListener(object : FullscreenListener {
                         override fun onEnterFullscreen(view: View, exitFullscreen: () -> Unit) {
-                            val decor = activity?.window?.decorView as? ViewGroup
-                            decor?.addView(
-                                view, ViewGroup.LayoutParams(
-                                    ViewGroup.LayoutParams.MATCH_PARENT,
-                                    ViewGroup.LayoutParams.MATCH_PARENT
+                            activity?.let { act ->
+                                val decor = act.window.decorView as? ViewGroup
+                                decor?.addView(
+                                    view, ViewGroup.LayoutParams(
+                                        ViewGroup.LayoutParams.MATCH_PARENT,
+                                        ViewGroup.LayoutParams.MATCH_PARENT
+                                    )
                                 )
-                            )
-                            fullScreenView = view
+                                fullScreenView = view
+
+                                // Set orientation to landscape
+                                act.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
+
+                                // Hide status and navigation bars
+                                WindowCompat.getInsetsController(act.window, act.window.decorView).apply {
+                                    hide(WindowInsetsCompat.Type.statusBars() or WindowInsetsCompat.Type.navigationBars())
+                                    systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+                                }
+                            }
                         }
 
                         override fun onExitFullscreen() {
-                            val decor = activity?.window?.decorView as? ViewGroup
-                            fullScreenView?.let { decor?.removeView(it) }
-                            fullScreenView = null
+                            activity?.let { act ->
+                                val decor = act.window.decorView as? ViewGroup
+                                fullScreenView?.let { decor?.removeView(it) }
+                                fullScreenView = null
+
+                                // Set orientation back to portrait
+                                act.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+
+                                // Show status and navigation bars
+                                WindowCompat.getInsetsController(act.window, act.window.decorView).apply {
+                                    show(WindowInsetsCompat.Type.statusBars() or WindowInsetsCompat.Type.navigationBars())
+                                }
+                            }
                         }
                     })
                 }
@@ -171,4 +196,5 @@ private tailrec fun Context.findActivity(): ComponentActivity? = when (this) {
     is android.content.ContextWrapper -> baseContext.findActivity()
     else -> null
 }
+
 
