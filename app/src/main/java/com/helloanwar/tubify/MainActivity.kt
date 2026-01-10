@@ -82,7 +82,7 @@ class MainActivity : ComponentActivity() {
                  try {
                      val account = task.await()
                      // Auth successful, fetch playlists or token
-                     mainViewModel.fetchUserPlaylists()
+//                     mainViewModel.fetchUserPlaylists()
                  } catch (e: Exception) {
                      android.util.Log.e("Auth", "Sign-in failed", e)
                  }
@@ -249,16 +249,22 @@ class MainActivity : ComponentActivity() {
                     userPreferences.lastPlayedType = com.helloanwar.tubify.data.local.UserPreferences.TYPE_VIDEO
                     userPreferences.lastPlayedId = videoId
                     lifecycleScope.launch {
-                        repository.insertVideo(VideoEntity(id = videoId, title = "Shared Video"))
-                        android.util.Log.d("TubifyDB", "Saved video: $videoId")
+                        youtubeRepository.getVideoDetails(videoId).collect { result ->
+                            val title = result.map { it.items.firstOrNull()?.snippet?.title }.getOrNull() ?: "Shared Video"
+                            repository.insertVideo(VideoEntity(id = videoId, title = title))
+                            android.util.Log.d("TubifyDB", "Saved video: $videoId ($title)")
+                        }
                     }
                 } else if (playlistId != null) {
                     _playerSource.value = PlayerSource.Playlist(playlistId)
                     userPreferences.lastPlayedType = com.helloanwar.tubify.data.local.UserPreferences.TYPE_PLAYLIST
                     userPreferences.lastPlayedId = playlistId
                     lifecycleScope.launch {
-                        repository.insertPlaylist(PlaylistEntity(id = playlistId, title = "Shared Playlist"))
-                        android.util.Log.d("TubifyDB", "Saved playlist: $playlistId")
+                        youtubeRepository.getPlaylistDetails(playlistId).collect { result ->
+                            val title = result.map { it.items.firstOrNull()?.snippet?.title }.getOrNull() ?: "Shared Playlist"
+                            repository.insertPlaylist(PlaylistEntity(id = playlistId, title = title))
+                            android.util.Log.d("TubifyDB", "Saved playlist: $playlistId ($title)")
+                        }
                     }
                 }
             }

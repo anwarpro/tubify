@@ -2,13 +2,20 @@ package com.helloanwar.tubify.ui.screens
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Card
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.SecondaryTabRow
 import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
@@ -18,6 +25,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.helloanwar.tubify.data.local.entity.PlaylistEntity
@@ -33,8 +41,20 @@ fun LibraryScreen(
 ) {
     var selectedTabIndex by remember { mutableIntStateOf(0) }
     val tabs = listOf("Videos", "Playlists")
+    val searchQuery by viewModel.searchQuery.collectAsState()
 
     Column(modifier = Modifier.fillMaxSize()) {
+        OutlinedTextField(
+            value = searchQuery,
+            onValueChange = { viewModel.updateSearchQuery(it) },
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            placeholder = { Text("Search your library...") },
+            leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
+            singleLine = true
+        )
+
         SecondaryTabRow(selectedTabIndex = selectedTabIndex) {
             tabs.forEachIndexed { index, title ->
                 Tab(
@@ -61,7 +81,11 @@ fun VideoList(
 
     LazyColumn(modifier = Modifier.fillMaxSize()) {
         items(videos) { video ->
-            VideoItem(video = video, onClick = { onVideoClick(video.id) })
+            VideoItem(
+                video = video,
+                onClick = { onVideoClick(video.id) },
+                onDelete = { viewModel.deleteVideo(video) }
+            )
         }
     }
 }
@@ -75,7 +99,11 @@ fun PlaylistList(
 
     LazyColumn(modifier = Modifier.fillMaxSize()) {
         items(playlists) { playlist ->
-            PlaylistItem(playlist = playlist, onClick = { onPlaylistClick(playlist.id) })
+            PlaylistItem(
+                playlist = playlist,
+                onClick = { onPlaylistClick(playlist.id) },
+                onDelete = { viewModel.deletePlaylist(playlist) }
+            )
         }
     }
 }
@@ -109,31 +137,47 @@ fun UserPlaylistList(
 }
 
 @Composable
-fun VideoItem(video: VideoEntity, onClick: () -> Unit) {
+fun VideoItem(video: VideoEntity, onClick: () -> Unit, onDelete: () -> Unit) {
     Card(
         modifier = Modifier
             .fillMaxWidth()
             .padding(8.dp)
             .clickable(onClick = onClick)
     ) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Text(text = video.title, style = MaterialTheme.typography.titleMedium)
-            Text(text = "ID: ${video.id}", style = MaterialTheme.typography.bodySmall)
+        Row(
+            modifier = Modifier.padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(text = video.title, style = MaterialTheme.typography.titleMedium)
+                Text(text = "ID: ${video.id}", style = MaterialTheme.typography.bodySmall)
+            }
+            IconButton(onClick = onDelete) {
+                Icon(Icons.Default.Delete, contentDescription = "Delete", tint = MaterialTheme.colorScheme.error)
+            }
         }
     }
 }
 
 @Composable
-fun PlaylistItem(playlist: PlaylistEntity, onClick: () -> Unit) {
+fun PlaylistItem(playlist: PlaylistEntity, onClick: () -> Unit, onDelete: () -> Unit) {
     Card(
         modifier = Modifier
             .fillMaxWidth()
             .padding(8.dp)
             .clickable(onClick = onClick)
     ) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Text(text = playlist.title, style = MaterialTheme.typography.titleMedium)
-            Text(text = "ID: ${playlist.id}", style = MaterialTheme.typography.bodySmall)
+        Row(
+            modifier = Modifier.padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(text = playlist.title, style = MaterialTheme.typography.titleMedium)
+                Text(text = "ID: ${playlist.id}", style = MaterialTheme.typography.bodySmall)
+            }
+            IconButton(onClick = onDelete) {
+                Icon(Icons.Default.Delete, contentDescription = "Delete", tint = MaterialTheme.colorScheme.error)
+            }
         }
     }
 }

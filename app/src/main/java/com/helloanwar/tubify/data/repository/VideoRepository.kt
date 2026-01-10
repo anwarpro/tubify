@@ -28,4 +28,12 @@ class VideoRepository(
     suspend fun getPlaylistById(id: String): PlaylistEntity? {
         return playlistDao.getPlaylistById(id)
     }
+
+    suspend fun deleteVideo(video: VideoEntity) {
+        videoDao.deleteVideo(video)
+    }
+
+    suspend fun deletePlaylist(playlist: PlaylistEntity) {
+        playlistDao.deletePlaylist(playlist)
+    }
 }

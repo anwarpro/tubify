@@ -17,4 +17,7 @@ interface PlaylistDao {
 
     @Query("SELECT * FROM playlists WHERE id = :id")
     suspend fun getPlaylistById(id: String): PlaylistEntity?
+
+    @androidx.room.Delete
+    suspend fun deletePlaylist(playlist: PlaylistEntity)
 }

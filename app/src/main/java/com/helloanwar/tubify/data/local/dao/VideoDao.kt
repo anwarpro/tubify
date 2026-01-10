@@ -17,4 +17,7 @@ interface VideoDao {
 
     @Query("SELECT * FROM videos WHERE id = :id")
     suspend fun getVideoById(id: String): VideoEntity?
+
+    @androidx.room.Delete
+    suspend fun deleteVideo(video: VideoEntity)
 }
