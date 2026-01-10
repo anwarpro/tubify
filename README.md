@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="tubify.png" alt="Tubify Banner" width="600">
+</p>
+
 # Tubify 📺
 
 Tubify is a lightweight, open-source Android utility designed for seamless YouTube background playback and library management. No more stopping your music when you switch apps.
