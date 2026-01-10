@@ -15,14 +15,19 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.viewinterop.AndroidView
 import android.content.pm.ActivityInfo
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
+import com.pierfrancescosoffritti.androidyoutubeplayer.core.player.PlayerConstants
 import com.pierfrancescosoffritti.androidyoutubeplayer.core.player.YouTubePlayer
 import com.pierfrancescosoffritti.androidyoutubeplayer.core.player.listeners.AbstractYouTubePlayerListener
 import com.pierfrancescosoffritti.androidyoutubeplayer.core.player.listeners.FullscreenListener
 import com.pierfrancescosoffritti.androidyoutubeplayer.core.player.options.IFramePlayerOptions
+import com.pierfrancescosoffritti.androidyoutubeplayer.core.player.utils.YouTubePlayerTracker
 import com.pierfrancescosoffritti.androidyoutubeplayer.core.player.views.YouTubePlayerView
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 sealed interface PlayerSource {
     data class Video(val videoId: String) : PlayerSource
@@ -34,9 +39,10 @@ fun YouTubePlayer(
     playerSource: PlayerSource,
     modifier: Modifier = Modifier,
     playerController: PlayerController? = null,
-    onStateChange: (Boolean) -> Unit = {}
+    onPlaybackUpdate: (videoId: String, isPlaying: Boolean, currentSecond: Float, duration: Float) -> Unit = { _, _, _, _ -> }
 ) {
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
 
     // We need the activity to handle full-screen mode if required, 
     // although for purely background playback strictly, fullscreen logic 
@@ -45,6 +51,7 @@ fun YouTubePlayer(
 
     var youTubePlayer by remember { mutableStateOf<YouTubePlayer?>(null) }
     var playerView by remember { mutableStateOf<YouTubePlayerView?>(null) }
+    var tracker = remember { YouTubePlayerTracker() }
     var fullScreenView by remember { mutableStateOf<View?>(null) }
 
     // Force recreation when switching to/from a playlist or between playlists
@@ -82,6 +89,7 @@ fun YouTubePlayer(
                         override fun onReady(player: YouTubePlayer) {
                             youTubePlayer = player
                             playerController?.setPlayer(player)
+                            player.addListener(tracker)
                             // Initial load only if it's a video. 
                             // Playlist is handled by IFramePlayerOptions.
                             if (playerSource is PlayerSource.Video) {
@@ -91,13 +99,68 @@ fun YouTubePlayer(
 
                         override fun onStateChange(
                             player: YouTubePlayer,
-                            state: com.pierfrancescosoffritti.androidyoutubeplayer.core.player.PlayerConstants.PlayerState
+                            state: PlayerConstants.PlayerState
                         ) {
-                            when (state) {
-                                com.pierfrancescosoffritti.androidyoutubeplayer.core.player.PlayerConstants.PlayerState.PLAYING -> onStateChange(true)
-                                com.pierfrancescosoffritti.androidyoutubeplayer.core.player.PlayerConstants.PlayerState.PAUSED,
-                                com.pierfrancescosoffritti.androidyoutubeplayer.core.player.PlayerConstants.PlayerState.ENDED -> onStateChange(false)
-                                else -> {} 
+                            val isPlaying = state == PlayerConstants.PlayerState.PLAYING
+                            onPlaybackUpdate(
+                                tracker.videoId ?: "",
+                                isPlaying,
+                                tracker.currentSecond,
+                                tracker.videoDuration
+                            )
+                        }
+
+                        override fun onCurrentSecond(player: YouTubePlayer, second: Float) {
+                            onPlaybackUpdate(
+                                tracker.videoId ?: "",
+                                tracker.state == PlayerConstants.PlayerState.PLAYING,
+                                second,
+                                tracker.videoDuration
+                            )
+                        }
+
+                        override fun onVideoDuration(player: YouTubePlayer, duration: Float) {
+                            onPlaybackUpdate(
+                                tracker.videoId ?: "",
+                                tracker.state == PlayerConstants.PlayerState.PLAYING,
+                                tracker.currentSecond,
+                                duration
+                            )
+                        }
+
+                        override fun onError(
+                            youTubePlayer: YouTubePlayer,
+                            error: PlayerConstants.PlayerError
+                        ) {
+                            super.onError(youTubePlayer, error)
+                            when (error) {
+                                PlayerConstants.PlayerError.UNKNOWN -> {
+
+                                }
+
+                                PlayerConstants.PlayerError.INVALID_PARAMETER_IN_REQUEST -> {
+
+                                }
+
+                                PlayerConstants.PlayerError.HTML_5_PLAYER -> {
+
+                                }
+
+                                PlayerConstants.PlayerError.VIDEO_NOT_FOUND -> {
+
+                                }
+
+                                PlayerConstants.PlayerError.VIDEO_NOT_PLAYABLE_IN_EMBEDDED_PLAYER -> {
+                                    //if is playlist move to next video after 1s
+                                    scope.launch {
+                                        delay(1000L)
+                                        youTubePlayer.nextVideo()
+                                    }
+                                }
+
+                                PlayerConstants.PlayerError.REQUEST_MISSING_HTTP_REFERER -> {
+
+                                }
                             }
                         }
                     }
@@ -123,10 +186,12 @@ fun YouTubePlayer(
                                 act.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
 
                                 // Hide status and navigation bars
-                                WindowCompat.getInsetsController(act.window, act.window.decorView).apply {
-                                    hide(WindowInsetsCompat.Type.statusBars() or WindowInsetsCompat.Type.navigationBars())
-                                    systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
-                                }
+                                WindowCompat.getInsetsController(act.window, act.window.decorView)
+                                    .apply {
+                                        hide(WindowInsetsCompat.Type.statusBars() or WindowInsetsCompat.Type.navigationBars())
+                                        systemBarsBehavior =
+                                            WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+                                    }
                             }
                         }
 
@@ -137,12 +202,14 @@ fun YouTubePlayer(
                                 fullScreenView = null
 
                                 // Set orientation back to portrait
-                                act.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+                                act.requestedOrientation =
+                                    ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
 
                                 // Show status and navigation bars
-                                WindowCompat.getInsetsController(act.window, act.window.decorView).apply {
-                                    show(WindowInsetsCompat.Type.statusBars() or WindowInsetsCompat.Type.navigationBars())
-                                }
+                                WindowCompat.getInsetsController(act.window, act.window.decorView)
+                                    .apply {
+                                        show(WindowInsetsCompat.Type.statusBars() or WindowInsetsCompat.Type.navigationBars())
+                                    }
                             }
                         }
                     })
@@ -160,7 +227,7 @@ fun YouTubePlayer(
     // (Playlist changes will trigger outer key recreation)
     LaunchedEffect(playerSource) {
         if (playerSource is PlayerSource.Video) {
-             youTubePlayer?.let { player ->
+            youTubePlayer?.let { player ->
                 loadSource(player, playerSource)
             }
         }
@@ -185,7 +252,7 @@ private fun loadSource(player: YouTubePlayer, source: PlayerSource) {
     when (source) {
         is PlayerSource.Video -> player.loadVideo(source.videoId, 0f)
         is PlayerSource.Playlist -> {
-            
+
         }
     }
 }

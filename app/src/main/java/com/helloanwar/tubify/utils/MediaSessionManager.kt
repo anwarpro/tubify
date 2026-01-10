@@ -19,30 +19,10 @@ class MediaSessionManager(
     private val onPlayCallback: () -> Unit,
     private val onPauseCallback: () -> Unit,
     private val onNextCallback: () -> Unit,
-    private val onPreviousCallback: () -> Unit
+    private val onPreviousCallback: () -> Unit,
+    private val onSeekToCallback: (Long) -> Unit
 ) {
-    private val mediaSession: MediaSessionCompat = MediaSessionCompat(context, "TubifyMediaSession").apply {
-        setFlags(MediaSessionCompat.FLAG_HANDLES_MEDIA_BUTTONS or MediaSessionCompat.FLAG_HANDLES_TRANSPORT_CONTROLS)
-        setCallback(object : MediaSessionCompat.Callback() {
-            override fun onPlay() {
-                onPlayCallback()
-                updateState(isPlaying = true)
-            }
-
-            override fun onPause() {
-                onPauseCallback()
-                updateState(isPlaying = false)
-            }
-
-            override fun onSkipToNext() {
-                onNextCallback()
-            }
-
-            override fun onSkipToPrevious() {
-                onPreviousCallback()
-            }
-        })
-    }
+    private val mediaSession: MediaSessionCompat = MediaSessionCompat(context, "TubifyMediaSession")
 
     private val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
     private val channelId = "media_playback_channel"
@@ -63,6 +43,33 @@ class MediaSessionManager(
     }
 
     init {
+        mediaSession.setFlags(MediaSessionCompat.FLAG_HANDLES_MEDIA_BUTTONS or MediaSessionCompat.FLAG_HANDLES_TRANSPORT_CONTROLS)
+        mediaSession.setCallback(object : MediaSessionCompat.Callback() {
+            override fun onPlay() {
+                onPlayCallback()
+                updateState(isPlaying = true)
+            }
+
+            override fun onPause() {
+                onPauseCallback()
+                updateState(isPlaying = false)
+            }
+
+            override fun onSkipToNext() {
+                onNextCallback()
+            }
+
+            override fun onSkipToPrevious() {
+                onPreviousCallback()
+            }
+
+            override fun onSeekTo(pos: Long) {
+                onSeekToCallback(pos)
+                val isPlaying = mediaSession.controller.playbackState.state == PlaybackStateCompat.STATE_PLAYING
+                updateState(isPlaying, pos)
+            }
+        })
+
         createNotificationChannel()
         val filter = android.content.IntentFilter().apply {
             addAction(ACTION_PLAY)
@@ -92,28 +99,30 @@ class MediaSessionManager(
         }
     }
 
-    fun updateState(isPlaying: Boolean) {
+    fun updateState(isPlaying: Boolean, position: Long = PlaybackStateCompat.PLAYBACK_POSITION_UNKNOWN) {
         val state = if (isPlaying) PlaybackStateCompat.STATE_PLAYING else PlaybackStateCompat.STATE_PAUSED
         val actions = PlaybackStateCompat.ACTION_PLAY or
                 PlaybackStateCompat.ACTION_PAUSE or
                 PlaybackStateCompat.ACTION_SKIP_TO_NEXT or
                 PlaybackStateCompat.ACTION_SKIP_TO_PREVIOUS or
-                PlaybackStateCompat.ACTION_PLAY_PAUSE
+                PlaybackStateCompat.ACTION_PLAY_PAUSE or
+                PlaybackStateCompat.ACTION_SEEK_TO
 
         mediaSession.setPlaybackState(
             PlaybackStateCompat.Builder()
                 .setActions(actions)
-                .setState(state, PlaybackStateCompat.PLAYBACK_POSITION_UNKNOWN, 1f)
+                .setState(state, position, 1f)
                 .build()
         )
         
         showNotification(isPlaying)
     }
 
-    fun updateMetadata(title: String) {
+    fun updateMetadata(title: String, duration: Long = 0) {
         mediaSession.setMetadata(
             MediaMetadataCompat.Builder()
                 .putString(MediaMetadataCompat.METADATA_KEY_TITLE, title)
+                .putLong(MediaMetadataCompat.METADATA_KEY_DURATION, duration)
                 .build()
         )
         // Refresh notification with new metadata

@@ -22,6 +22,14 @@ class PlayerController {
     fun seekTo(seconds: Float) {
         player?.seekTo(seconds)
     }
+
+    fun nextVideo() {
+        player?.nextVideo()
+    }
+
+    fun previousVideo() {
+        player?.previousVideo()
+    }
 }
 
 @Composable
