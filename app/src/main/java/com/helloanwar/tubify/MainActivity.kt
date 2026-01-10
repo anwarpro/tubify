@@ -192,6 +192,9 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun setupServiceCallbacks(service: PlaybackService) {
+        service.onPlay = { _playerController.play() }
+        service.onPause = { _playerController.pause() }
+        service.onSeekTo = { pos -> _playerController.seekTo(pos / 1000f) }
         service.onNext = {
             val currentSource = _playerSource.value
             if (currentSource is PlayerSource.Playlist) {

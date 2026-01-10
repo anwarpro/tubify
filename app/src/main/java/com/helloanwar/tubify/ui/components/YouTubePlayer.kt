@@ -52,23 +52,6 @@ fun YouTubePlayer(
     val tracker = remember { YouTubePlayerTracker() }
     var fullScreenView by remember { mutableStateOf<View?>(null) }
 
-    // Link service callbacks
-    DisposableEffect(playbackService) {
-        playbackService?.let { service ->
-            service.onPlay = { playerController?.play() }
-            service.onPause = { playerController?.pause() }
-            service.onNext = { /* handled in MainActivity */ }
-            service.onPrevious = { /* handled in MainActivity */ }
-            service.onSeekTo = { pos -> playerController?.seekTo(pos / 1000f) }
-        }
-        onDispose {
-            playbackService?.onPlay = null
-            playbackService?.onPause = null
-            playbackService?.onNext = null
-            playbackService?.onPrevious = null
-            playbackService?.onSeekTo = null
-        }
-    }
 
     val key = remember(playerSource) {
         if (playerSource is PlayerSource.Playlist) "playlist_${playerSource.playlistId}"
