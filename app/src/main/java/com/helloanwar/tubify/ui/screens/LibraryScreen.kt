@@ -9,8 +9,8 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Card
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.SecondaryTabRow
 import androidx.compose.material3.Tab
-import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -32,10 +32,10 @@ fun LibraryScreen(
     onSignInClick: () -> Unit
 ) {
     var selectedTabIndex by remember { mutableIntStateOf(0) }
-    val tabs = listOf("Videos", "Playlists", "My Playlists")
+    val tabs = listOf("Videos", "Playlists")
 
     Column(modifier = Modifier.fillMaxSize()) {
-        TabRow(selectedTabIndex = selectedTabIndex) {
+        SecondaryTabRow(selectedTabIndex = selectedTabIndex) {
             tabs.forEachIndexed { index, title ->
                 Tab(
                     selected = selectedTabIndex == index,
@@ -48,7 +48,6 @@ fun LibraryScreen(
         when (selectedTabIndex) {
             0 -> VideoList(viewModel = viewModel, onVideoClick = onVideoClick)
             1 -> PlaylistList(viewModel = viewModel, onPlaylistClick = onPlaylistClick)
-            2 -> UserPlaylistList(viewModel = viewModel, onPlaylistClick = onPlaylistClick, onSignInClick = onSignInClick)
         }
     }
 }
@@ -140,7 +139,10 @@ fun PlaylistItem(playlist: PlaylistEntity, onClick: () -> Unit) {
 }
 
 @Composable
-fun UserPlaylistItem(playlist: com.helloanwar.tubify.data.remote.model.PlaylistItem, onClick: () -> Unit) {
+fun UserPlaylistItem(
+    playlist: com.helloanwar.tubify.data.remote.model.PlaylistItem,
+    onClick: () -> Unit
+) {
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -150,7 +152,10 @@ fun UserPlaylistItem(playlist: com.helloanwar.tubify.data.remote.model.PlaylistI
         Column(modifier = Modifier.padding(16.dp)) {
             Text(text = playlist.snippet.title, style = MaterialTheme.typography.titleMedium)
             Text(text = "ID: ${playlist.id}", style = MaterialTheme.typography.bodySmall)
-            Text(text = "Items: ${playlist.contentDetails?.itemCount ?: 0}", style = MaterialTheme.typography.bodySmall)
+            Text(
+                text = "Items: ${playlist.contentDetails?.itemCount ?: 0}",
+                style = MaterialTheme.typography.bodySmall
+            )
         }
     }
 }
