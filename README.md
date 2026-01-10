@@ -9,8 +9,13 @@ Tubify is a lightweight, open-source Android utility designed for seamless YouTu
 - **Local Library**: Organize your shared videos and playlists in one place.
 - **Quick Search**: Swiftly find content in your saved library with real-time filtering.
 - **Google Sign-In**: Sync your personal YouTube playlists directly into the app.
+- **Ads Skip**: No more annoying ads. Enjoy an uninterrupted viewing experience.
 
-## 🚀 Getting Started
+## � Download
+
+You can download the latest APK from the [Releases](https://github.com/mhdanwar/Tubify/releases) page.
+
+## 🏗️ Build Yourself
 
 To run Tubify locally, you'll need to set up a YouTube Data API v3 key.
 
@@ -30,6 +35,11 @@ To run Tubify locally, you'll need to set up a YouTube Data API v3 key.
 - **Database**: Room
 - **Networking**: Ktor
 - **Player**: [android-youtube-player](https://github.com/PierfrancescoSoffritti/android-youtube-player)
+
+## 📝 Todo
+
+- [ ] Google Sign in
+- [ ] Picture in Picture
 
 ## 📜 License
 
