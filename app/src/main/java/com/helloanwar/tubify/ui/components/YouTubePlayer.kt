@@ -39,39 +39,50 @@ fun YouTubePlayer(
     playerSource: PlayerSource,
     modifier: Modifier = Modifier,
     playerController: PlayerController? = null,
+    playbackService: com.helloanwar.tubify.service.PlaybackService? = null,
     onPlaybackUpdate: (videoId: String, isPlaying: Boolean, currentSecond: Float, duration: Float) -> Unit = { _, _, _, _ -> }
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-
-    // We need the activity to handle full-screen mode if required, 
-    // although for purely background playback strictly, fullscreen logic 
-    // might be secondary, but we keep it to match original capabilities.
     val activity = remember(context) { context.findActivity() }
 
-    var youTubePlayer by remember { mutableStateOf<YouTubePlayer?>(null) }
-    var playerView by remember { mutableStateOf<YouTubePlayerView?>(null) }
-    var tracker = remember { YouTubePlayerTracker() }
+    // Use persistence from service if available
+    var youTubePlayer by remember { mutableStateOf<YouTubePlayer?>(playbackService?.youTubePlayer) }
+    var playerView by remember { mutableStateOf<YouTubePlayerView?>(playbackService?.playerView) }
+    val tracker = remember { YouTubePlayerTracker() }
     var fullScreenView by remember { mutableStateOf<View?>(null) }
 
-    // Force recreation when switching to/from a playlist or between playlists
-    // This allows IFramePlayerOptions to be re-applied correctly
+    // Link service callbacks
+    DisposableEffect(playbackService) {
+        playbackService?.let { service ->
+            service.onPlay = { playerController?.play() }
+            service.onPause = { playerController?.pause() }
+            service.onNext = { /* handled in MainActivity */ }
+            service.onPrevious = { /* handled in MainActivity */ }
+            service.onSeekTo = { pos -> playerController?.seekTo(pos / 1000f) }
+        }
+        onDispose {
+            playbackService?.onPlay = null
+            playbackService?.onPause = null
+            playbackService?.onNext = null
+            playbackService?.onPrevious = null
+            playbackService?.onSeekTo = null
+        }
+    }
+
     val key = remember(playerSource) {
         if (playerSource is PlayerSource.Playlist) "playlist_${playerSource.playlistId}"
-        else "video_player" // Keep same player for video-to-video transitions if desired
+        else "video_player"
     }
 
     androidx.compose.runtime.key(key) {
         AndroidView(
             modifier = modifier,
             factory = { ctx ->
-                YouTubePlayerView(ctx).apply {
-                    playerView = this
-                    // CRITICAL: Disable automatic initialization to manually control lifecycle
+                val view = playbackService?.playerView ?: YouTubePlayerView(ctx).apply {
                     enableAutomaticInitialization = false
-                    // Enable background playback
                     enableBackgroundPlayback(true)
-
+                    
                     val options = IFramePlayerOptions.Builder(ctx)
                         .controls(1)
                         .fullscreen(1)
@@ -88,110 +99,44 @@ fun YouTubePlayer(
                     val listener = object : AbstractYouTubePlayerListener() {
                         override fun onReady(player: YouTubePlayer) {
                             youTubePlayer = player
+                            playbackService?.youTubePlayer = player
                             playerController?.setPlayer(player)
                             player.addListener(tracker)
-                            // Initial load only if it's a video. 
-                            // Playlist is handled by IFramePlayerOptions.
                             if (playerSource is PlayerSource.Video) {
                                 loadSource(player, playerSource)
                             }
                         }
 
-                        override fun onStateChange(
-                            player: YouTubePlayer,
-                            state: PlayerConstants.PlayerState
-                        ) {
+                        override fun onStateChange(player: YouTubePlayer, state: PlayerConstants.PlayerState) {
                             val isPlaying = state == PlayerConstants.PlayerState.PLAYING
-                            onPlaybackUpdate(
-                                tracker.videoId ?: "",
-                                isPlaying,
-                                tracker.currentSecond,
-                                tracker.videoDuration
-                            )
+                            onPlaybackUpdate(tracker.videoId ?: "", isPlaying, tracker.currentSecond, tracker.videoDuration)
+                            playbackService?.setPlayerState(tracker.videoId ?: "", isPlaying, tracker.currentSecond, tracker.videoDuration)
                         }
 
                         override fun onCurrentSecond(player: YouTubePlayer, second: Float) {
-                            onPlaybackUpdate(
-                                tracker.videoId ?: "",
-                                tracker.state == PlayerConstants.PlayerState.PLAYING,
-                                second,
-                                tracker.videoDuration
-                            )
+                            onPlaybackUpdate(tracker.videoId ?: "", tracker.state == PlayerConstants.PlayerState.PLAYING, second, tracker.videoDuration)
+                            playbackService?.setPlayerState(tracker.videoId ?: "", tracker.state == PlayerConstants.PlayerState.PLAYING, second, tracker.videoDuration)
                         }
 
                         override fun onVideoDuration(player: YouTubePlayer, duration: Float) {
-                            onPlaybackUpdate(
-                                tracker.videoId ?: "",
-                                tracker.state == PlayerConstants.PlayerState.PLAYING,
-                                tracker.currentSecond,
-                                duration
-                            )
-                        }
-
-                        override fun onError(
-                            youTubePlayer: YouTubePlayer,
-                            error: PlayerConstants.PlayerError
-                        ) {
-                            super.onError(youTubePlayer, error)
-                            when (error) {
-                                PlayerConstants.PlayerError.UNKNOWN -> {
-
-                                }
-
-                                PlayerConstants.PlayerError.INVALID_PARAMETER_IN_REQUEST -> {
-
-                                }
-
-                                PlayerConstants.PlayerError.HTML_5_PLAYER -> {
-
-                                }
-
-                                PlayerConstants.PlayerError.VIDEO_NOT_FOUND -> {
-
-                                }
-
-                                PlayerConstants.PlayerError.VIDEO_NOT_PLAYABLE_IN_EMBEDDED_PLAYER -> {
-                                    //if is playlist move to next video after 1s
-                                    scope.launch {
-                                        delay(1000L)
-                                        youTubePlayer.nextVideo()
-                                    }
-                                }
-
-                                PlayerConstants.PlayerError.REQUEST_MISSING_HTTP_REFERER -> {
-
-                                }
-                            }
+                            onPlaybackUpdate(tracker.videoId ?: "", tracker.state == PlayerConstants.PlayerState.PLAYING, tracker.currentSecond, duration)
+                            playbackService?.setPlayerState(tracker.videoId ?: "", tracker.state == PlayerConstants.PlayerState.PLAYING, tracker.currentSecond, duration)
                         }
                     }
 
-                    // Initialize without passing the lifecycle to the view itself.
-                    // This prevents the view from automatically pausing the player onStop.
                     initialize(listener, options)
 
-                    // Optional: Restore fullscreen listener if needed
                     addFullscreenListener(object : FullscreenListener {
                         override fun onEnterFullscreen(view: View, exitFullscreen: () -> Unit) {
                             activity?.let { act ->
                                 val decor = act.window.decorView as? ViewGroup
-                                decor?.addView(
-                                    view, ViewGroup.LayoutParams(
-                                        ViewGroup.LayoutParams.MATCH_PARENT,
-                                        ViewGroup.LayoutParams.MATCH_PARENT
-                                    )
-                                )
+                                decor?.addView(view, ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
                                 fullScreenView = view
-
-                                // Set orientation to landscape
                                 act.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
-
-                                // Hide status and navigation bars
-                                WindowCompat.getInsetsController(act.window, act.window.decorView)
-                                    .apply {
-                                        hide(WindowInsetsCompat.Type.statusBars() or WindowInsetsCompat.Type.navigationBars())
-                                        systemBarsBehavior =
-                                            WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
-                                    }
+                                WindowCompat.getInsetsController(act.window, act.window.decorView).apply {
+                                    hide(WindowInsetsCompat.Type.statusBars() or WindowInsetsCompat.Type.navigationBars())
+                                    systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+                                }
                             }
                         }
 
@@ -200,31 +145,34 @@ fun YouTubePlayer(
                                 val decor = act.window.decorView as? ViewGroup
                                 fullScreenView?.let { decor?.removeView(it) }
                                 fullScreenView = null
-
-                                // Set orientation back to portrait
-                                act.requestedOrientation =
-                                    ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
-
-                                // Show status and navigation bars
-                                WindowCompat.getInsetsController(act.window, act.window.decorView)
-                                    .apply {
-                                        show(WindowInsetsCompat.Type.statusBars() or WindowInsetsCompat.Type.navigationBars())
-                                    }
+                                act.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+                                WindowCompat.getInsetsController(act.window, act.window.decorView).apply {
+                                    show(WindowInsetsCompat.Type.statusBars() or WindowInsetsCompat.Type.navigationBars())
+                                }
                             }
                         }
                     })
                 }
+                playbackService?.playerView = view
+                playerView = view
+                view
+            },
+            update = { view ->
+                // Ensure playerController is updated if view/player already exists
+                youTubePlayer?.let { playerController?.setPlayer(it) }
             },
             onRelease = {
-                // AndroidView's onRelease is called when the View is detached.
-                // equivalent to onDispose logic often.
-                it.release()
+                // Do NOT release if we want it to persist in service
+                if (playbackService == null) {
+                    it.release()
+                } else {
+                    // Detach from parent to allow re-attachment
+                    (it.parent as? ViewGroup)?.removeView(it)
+                }
             }
         )
     }
 
-    // React to source changes ONLY for Video-to-Video
-    // (Playlist changes will trigger outer key recreation)
     LaunchedEffect(playerSource) {
         if (playerSource is PlayerSource.Video) {
             youTubePlayer?.let { player ->
@@ -233,12 +181,11 @@ fun YouTubePlayer(
         }
     }
 
-    // Handle cleanup when Composable is disposed
     DisposableEffect(Unit) {
         onDispose {
-            playerView?.release()
-
-            // Clean up fullscreen view if active
+            if (playbackService == null) {
+                playerView?.release()
+            }
             fullScreenView?.let { view ->
                 val decor = activity?.window?.decorView as? ViewGroup
                 decor?.removeView(view)

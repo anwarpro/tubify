@@ -28,16 +28,36 @@ import com.helloanwar.tubify.ui.theme.TubifyTheme
 import com.helloanwar.tubify.ui.viewmodel.MainViewModel
 import com.helloanwar.tubify.ui.viewmodel.MainViewModelFactory
 import com.helloanwar.tubify.utils.VideoIdsProvider
+import android.content.ComponentName
+import android.content.Context
+import android.content.Intent
+import android.content.ServiceConnection
+import android.os.IBinder
+import com.helloanwar.tubify.service.PlaybackService
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.setValue
 
 class MainActivity : ComponentActivity() {
 
     private val _playerSource = mutableStateOf<PlayerSource>(PlayerSource.Video(VideoIdsProvider.nextVideoId))
     private val _playerController = com.helloanwar.tubify.ui.components.PlayerController()
-    private var mediaSessionManager: com.helloanwar.tubify.utils.MediaSessionManager? = null
     private var lastVideoId: String? = null
     private var lastSeekTime: Long = 0
+    private var playbackService = mutableStateOf<PlaybackService?>(null)
+
+    private val serviceConnection = object : ServiceConnection {
+        override fun onServiceConnected(name: ComponentName?, service: IBinder?) {
+            val binder = service as PlaybackService.LocalBinder
+            playbackService.value = binder.getService()
+            setupServiceCallbacks(binder.getService())
+        }
+
+        override fun onServiceDisconnected(name: ComponentName?) {
+            playbackService.value = null
+        }
+    }
     
     private lateinit var database: AppDatabase
     private lateinit var repository: VideoRepository
@@ -94,54 +114,10 @@ class MainActivity : ComponentActivity() {
             _playerSource.value = PlayerSource.Video(lastId)
         }
 
-        mediaSessionManager = com.helloanwar.tubify.utils.MediaSessionManager(
-            context = this,
-            onPlayCallback = { _playerController.play() },
-            onPauseCallback = { _playerController.pause() },
-            onNextCallback = {
-                val currentSource = _playerSource.value
-                if (currentSource is PlayerSource.Playlist) {
-                    _playerController.nextVideo()
-                } else if (currentSource is PlayerSource.Video) {
-                    val videos = mainViewModel.videos.value
-                    if (videos.isNotEmpty()) {
-                        val currentIndex = videos.indexOfFirst { it.id == currentSource.videoId }
-                        val nextIndex = if (currentIndex != -1 && currentIndex < videos.size - 1) currentIndex + 1 else 0
-                        val nextVideo = videos[nextIndex]
-                        _playerSource.value = PlayerSource.Video(nextVideo.id)
-                        userPreferences.lastPlayedType = com.helloanwar.tubify.data.local.UserPreferences.TYPE_VIDEO
-                        userPreferences.lastPlayedId = nextVideo.id
-                    } else {
-                        // Fallback to random video if database is empty
-                        _playerSource.value = PlayerSource.Video(VideoIdsProvider.nextVideoId)
-                    }
-                }
-            },
-            onPreviousCallback = { 
-                val currentSource = _playerSource.value
-                if (currentSource is PlayerSource.Playlist) {
-                    _playerController.previousVideo()
-                } else if (currentSource is PlayerSource.Video) {
-                    val videos = mainViewModel.videos.value
-                    if (videos.isNotEmpty()) {
-                        val currentIndex = videos.indexOfFirst { it.id == currentSource.videoId }
-                        val prevIndex = if (currentIndex > 0) currentIndex - 1 else videos.size - 1
-                        val prevVideo = videos[prevIndex]
-                        _playerSource.value = PlayerSource.Video(prevVideo.id)
-                        userPreferences.lastPlayedType = com.helloanwar.tubify.data.local.UserPreferences.TYPE_VIDEO
-                        userPreferences.lastPlayedId = prevVideo.id
-                    } else {
-                        // Fallback to start of current video
-                        _playerController.seekTo(0f)
-                    }
-                }
-            },
-            onSeekToCallback = { position ->
-                lastSeekTime = System.currentTimeMillis()
-                _playerController.seekTo(position / 1000f)
-            }
-        )
-        mediaSessionManager?.startSession()
+        // Bind to PlaybackService
+        val intent = Intent(this, PlaybackService::class.java)
+        startService(intent) // Ensure service stays alive
+        bindService(intent, serviceConnection, Context.BIND_AUTO_CREATE)
 
         // Handle initial intent
         handleIntent(intent)
@@ -150,21 +126,22 @@ class MainActivity : ComponentActivity() {
             TubifyTheme {
                 Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
                     val playerSource by remember { _playerSource }
-                    
+                    val service by remember { playbackService }
                     Column(modifier = Modifier.padding(innerPadding)) {
                         YouTubePlayer(
                             playerSource = playerSource,
                             playerController = _playerController,
+                            playbackService = service,
                             onPlaybackUpdate = { videoId, isPlaying, currentSecond, duration ->
                                 if (System.currentTimeMillis() - lastSeekTime > 1000L) {
-                                    mediaSessionManager?.updateState(isPlaying, (currentSecond * 1000).toLong())
+                                    service?.updateState(isPlaying, (currentSecond * 1000).toLong())
                                 }
                                 
                                 // Update metadata (title and duration)
                                 val currentTitle = mainViewModel.videos.value.find { it.id == videoId }?.title 
                                     ?: (if (playerSource is PlayerSource.Playlist) "Playlist Playing" else "Video Playing")
                                 
-                                mediaSessionManager?.updateMetadata(currentTitle, (duration * 1000).toLong())
+                                service?.updateMetadata(currentTitle, (duration * 1000).toLong())
                                 
                                 // If title is generic and we have a new videoId, try to fetch real title
                                 if (videoId.isNotEmpty() && videoId != lastVideoId && (currentTitle == "Video Playing" || currentTitle == "Playlist Playing")) {
@@ -174,7 +151,7 @@ class MainActivity : ComponentActivity() {
                                             result.onSuccess { response ->
                                                 val realTitle = response.items.firstOrNull()?.snippet?.title
                                                 if (realTitle != null) {
-                                                    mediaSessionManager?.updateMetadata(realTitle, (duration * 1000).toLong())
+                                                    service?.updateMetadata(realTitle, (duration * 1000).toLong())
                                                 }
                                             }
                                         }
@@ -211,7 +188,46 @@ class MainActivity : ComponentActivity() {
 
     override fun onDestroy() {
         super.onDestroy()
-        mediaSessionManager?.release()
+        unbindService(serviceConnection)
+    }
+
+    private fun setupServiceCallbacks(service: PlaybackService) {
+        service.onNext = {
+            val currentSource = _playerSource.value
+            if (currentSource is PlayerSource.Playlist) {
+                _playerController.nextVideo()
+            } else if (currentSource is PlayerSource.Video) {
+                val videos = mainViewModel.videos.value
+                if (videos.isNotEmpty()) {
+                    val currentIndex = videos.indexOfFirst { it.id == currentSource.videoId }
+                    val nextIndex = if (currentIndex != -1 && currentIndex < videos.size - 1) currentIndex + 1 else 0
+                    val nextVideo = videos[nextIndex]
+                    _playerSource.value = PlayerSource.Video(nextVideo.id)
+                    userPreferences.lastPlayedType = com.helloanwar.tubify.data.local.UserPreferences.TYPE_VIDEO
+                    userPreferences.lastPlayedId = nextVideo.id
+                } else {
+                    _playerSource.value = PlayerSource.Video(VideoIdsProvider.nextVideoId)
+                }
+            }
+        }
+        service.onPrevious = {
+            val currentSource = _playerSource.value
+            if (currentSource is PlayerSource.Playlist) {
+                _playerController.previousVideo()
+            } else if (currentSource is PlayerSource.Video) {
+                val videos = mainViewModel.videos.value
+                if (videos.isNotEmpty()) {
+                    val currentIndex = videos.indexOfFirst { it.id == currentSource.videoId }
+                    val prevIndex = if (currentIndex > 0) currentIndex - 1 else videos.size - 1
+                    val prevVideo = videos[prevIndex]
+                    _playerSource.value = PlayerSource.Video(prevVideo.id)
+                    userPreferences.lastPlayedType = com.helloanwar.tubify.data.local.UserPreferences.TYPE_VIDEO
+                    userPreferences.lastPlayedId = prevVideo.id
+                } else {
+                    _playerController.seekTo(0f)
+                }
+            }
+        }
     }
 
     override fun onNewIntent(intent: android.content.Intent) {

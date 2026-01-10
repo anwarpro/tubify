@@ -16,6 +16,7 @@ import com.helloanwar.tubify.R
 
 class MediaSessionManager(
     private val context: Context,
+    private val isService: Boolean = false,
     private val onPlayCallback: () -> Unit,
     private val onPauseCallback: () -> Unit,
     private val onNextCallback: () -> Unit,
@@ -203,7 +204,16 @@ class MediaSessionManager(
         val pendingIntent = PendingIntent.getActivity(context, 0, resultIntent, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
         builder.setContentIntent(pendingIntent)
         
-        notificationManager.notify(NOTIFICATION_ID, builder.build())
+        val notification = builder.build()
+        if (isService && context is android.app.Service) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                context.startForeground(NOTIFICATION_ID, notification, android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK)
+            } else {
+                context.startForeground(NOTIFICATION_ID, notification)
+            }
+        } else {
+            notificationManager.notify(NOTIFICATION_ID, notification)
+        }
     }
 
     private fun createNotificationChannel() {
