@@ -1,6 +1,11 @@
 package com.helloanwar.tubify
 
+import android.content.ComponentName
+import android.content.Context
+import android.content.Intent
+import android.content.ServiceConnection
 import android.os.Bundle
+import android.os.IBinder
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -21,6 +26,7 @@ import com.helloanwar.tubify.data.local.database.AppDatabase
 import com.helloanwar.tubify.data.local.entity.PlaylistEntity
 import com.helloanwar.tubify.data.local.entity.VideoEntity
 import com.helloanwar.tubify.data.repository.VideoRepository
+import com.helloanwar.tubify.service.PlaybackService
 import com.helloanwar.tubify.ui.components.PlayerSource
 import com.helloanwar.tubify.ui.components.YouTubePlayer
 import com.helloanwar.tubify.ui.screens.LibraryScreen
@@ -28,16 +34,8 @@ import com.helloanwar.tubify.ui.theme.TubifyTheme
 import com.helloanwar.tubify.ui.viewmodel.MainViewModel
 import com.helloanwar.tubify.ui.viewmodel.MainViewModelFactory
 import com.helloanwar.tubify.utils.VideoIdsProvider
-import android.content.ComponentName
-import android.content.Context
-import android.content.Intent
-import android.content.ServiceConnection
-import android.os.IBinder
-import com.helloanwar.tubify.service.PlaybackService
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.setValue
 
 class MainActivity : ComponentActivity() {
 
@@ -115,9 +113,9 @@ class MainActivity : ComponentActivity() {
         }
 
         // Bind to PlaybackService
-        val intent = Intent(this, PlaybackService::class.java)
-        startService(intent) // Ensure service stays alive
-        bindService(intent, serviceConnection, Context.BIND_AUTO_CREATE)
+        val serviceIntent = Intent(this, PlaybackService::class.java)
+        startService(serviceIntent) // Ensure service stays alive
+        bindService(serviceIntent, serviceConnection, Context.BIND_AUTO_CREATE)
 
         // Handle initial intent
         handleIntent(intent)
