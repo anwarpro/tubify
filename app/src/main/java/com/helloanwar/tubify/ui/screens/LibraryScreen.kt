@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Card
@@ -49,16 +50,25 @@ fun LibraryScreen(
     val searchQuery by viewModel.searchQuery.collectAsState()
 
     Column(modifier = Modifier.fillMaxSize()) {
-        OutlinedTextField(
-            value = searchQuery,
-            onValueChange = { viewModel.updateSearchQuery(it) },
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            placeholder = { Text("Search your library...") },
-            leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
-            singleLine = true
-        )
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.fillMaxWidth().padding(end = 16.dp)
+        ) {
+            OutlinedTextField(
+                value = searchQuery,
+                onValueChange = { viewModel.updateSearchQuery(it) },
+                modifier = Modifier
+                    .weight(1f)
+                    .padding(16.dp),
+                placeholder = { Text("Search your library...") },
+                leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
+                singleLine = true
+            )
+            
+            IconButton(onClick = onSignInClick) {
+                Icon(Icons.Default.AccountCircle, contentDescription = "Login to YouTube")
+            }
+        }
 
         SecondaryTabRow(selectedTabIndex = selectedTabIndex) {
             tabs.forEachIndexed { index, title ->

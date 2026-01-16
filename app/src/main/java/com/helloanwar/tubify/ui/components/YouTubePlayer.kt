@@ -28,6 +28,7 @@ import com.pierfrancescosoffritti.androidyoutubeplayer.core.player.utils.YouTube
 import com.pierfrancescosoffritti.androidyoutubeplayer.core.player.views.YouTubePlayerView
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import android.webkit.WebView
 
 sealed interface PlayerSource {
     data class Video(val videoId: String) : PlayerSource
@@ -216,6 +217,15 @@ fun YouTubePlayer(
                 }
                 playbackService?.playerView = view
                 playerView = view
+
+                // Enable DOM storage for login persistence
+                // We need to wait a bit or try to find it immediately. Usually it is added quickly.
+                view.post {
+                     val webView = view.findWebView()
+                     webView?.settings?.domStorageEnabled = true
+                     webView?.settings?.databaseEnabled = true
+                }
+
                 view
             },
             update = { view ->
@@ -272,4 +282,14 @@ private tailrec fun Context.findActivity(): ComponentActivity? = when (this) {
     else -> null
 }
 
-
+private fun View.findWebView(): WebView? {
+    if (this is WebView) return this
+    if (this is ViewGroup) {
+        for (i in 0 until childCount) {
+             val child = getChildAt(i)
+             val webView = child.findWebView()
+             if (webView != null) return webView
+        }
+    }
+    return null
+}

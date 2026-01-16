@@ -123,61 +123,80 @@ class MainActivity : ComponentActivity() {
         setContent {
             TubifyTheme {
                 Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
+                    val showLoginScreen = remember { mutableStateOf(false) }
                     val playerSource by remember { _playerSource }
                     val service by remember { playbackService }
-                    Column(modifier = Modifier.padding(innerPadding)) {
-                        YouTubePlayer(
-                            playerSource = playerSource,
-                            playerController = _playerController,
-                            playbackService = service,
-                            onPlaybackUpdate = { videoId, isPlaying, currentSecond, duration ->
-                                if (System.currentTimeMillis() - lastSeekTime > 1000L) {
-                                    service?.updateState(isPlaying, (currentSecond * 1000).toLong())
-                                }
-                                
-                                // Update metadata (title and duration)
-                                val currentTitle = mainViewModel.videos.value.find { it.id == videoId }?.title 
-                                    ?: (if (playerSource is PlayerSource.Playlist) "Playlist Playing" else "Video Playing")
-                                
-                                service?.updateMetadata(currentTitle, (duration * 1000).toLong())
-                                
-                                // If title is generic and we have a new videoId, try to fetch real title
-                                if (videoId.isNotEmpty() && videoId != lastVideoId && (currentTitle == "Video Playing" || currentTitle == "Playlist Playing")) {
-                                    lastVideoId = videoId
-                                    lifecycleScope.launch {
-                                        youtubeRepository.getVideoDetails(videoId).collect { result ->
-                                            result.onSuccess { response ->
-                                                val realTitle = response.items.firstOrNull()?.snippet?.title
-                                                if (realTitle != null) {
-                                                    service?.updateMetadata(realTitle, (duration * 1000).toLong())
+                    
+                    if (showLoginScreen.value) {
+                         val account = authClient.getSignedInAccount()
+                         val email = account?.email
+                         com.helloanwar.tubify.ui.screens.YouTubeLoginScreen(
+                             email = email,
+                             onLoginSuccess = {
+                                 showLoginScreen.value = false
+                                 // Ideally, refresh player or something to pick up cookies?
+                                 // The cookies are shared across WebViews in the app.
+                             },
+                             onClose = {
+                                 showLoginScreen.value = false
+                             }
+                         )
+                    } else {
+                        Column(modifier = Modifier.padding(innerPadding)) {
+                            YouTubePlayer(
+                                playerSource = playerSource,
+                                playerController = _playerController,
+                                playbackService = service,
+                                onPlaybackUpdate = { videoId, isPlaying, currentSecond, duration ->
+                                    if (System.currentTimeMillis() - lastSeekTime > 1000L) {
+                                        service?.updateState(isPlaying, (currentSecond * 1000).toLong())
+                                    }
+                                    
+                                    // Update metadata (title and duration)
+                                    val currentTitle = mainViewModel.videos.value.find { it.id == videoId }?.title 
+                                        ?: (if (playerSource is PlayerSource.Playlist) "Playlist Playing" else "Video Playing")
+                                    
+                                    service?.updateMetadata(currentTitle, (duration * 1000).toLong())
+                                    
+                                    // If title is generic and we have a new videoId, try to fetch real title
+                                    if (videoId.isNotEmpty() && videoId != lastVideoId && (currentTitle == "Video Playing" || currentTitle == "Playlist Playing")) {
+                                        lastVideoId = videoId
+                                        lifecycleScope.launch {
+                                            youtubeRepository.getVideoDetails(videoId).collect { result ->
+                                                result.onSuccess { response ->
+                                                    val realTitle = response.items.firstOrNull()?.snippet?.title
+                                                    if (realTitle != null) {
+                                                        service?.updateMetadata(realTitle, (duration * 1000).toLong())
+                                                    }
                                                 }
                                             }
                                         }
                                     }
                                 }
-                            }
-                        )
+                            )
 
-                        LibraryScreen(
-                            viewModel = mainViewModel,
-                            onVideoClick = { videoId ->
-                                _playerSource.value = PlayerSource.Video(videoId)
-                                userPreferences.lastPlayedType = com.helloanwar.tubify.data.local.UserPreferences.TYPE_VIDEO
-                                userPreferences.lastPlayedId = videoId
-                                mainViewModel.viewModelScope.launch {
-                                    // Optionally fetch video details here if needed
-                                     // youtubeRepository.getVideoDetails(videoId)...
+                            LibraryScreen(
+                                viewModel = mainViewModel,
+                                onVideoClick = { videoId ->
+                                    _playerSource.value = PlayerSource.Video(videoId)
+                                    userPreferences.lastPlayedType = com.helloanwar.tubify.data.local.UserPreferences.TYPE_VIDEO
+                                    userPreferences.lastPlayedId = videoId
+                                    mainViewModel.viewModelScope.launch {
+                                        // Optionally fetch video details here if needed
+                                         // youtubeRepository.getVideoDetails(videoId)...
+                                    }
+                                },
+                                onPlaylistClick = { playlistId ->
+                                    _playerSource.value = PlayerSource.Playlist(playlistId)
+                                    userPreferences.lastPlayedType = com.helloanwar.tubify.data.local.UserPreferences.TYPE_PLAYLIST
+                                    userPreferences.lastPlayedId = playlistId
+                                },
+                                onSignInClick = {
+                                    showLoginScreen.value = true
+                                    // signInLauncher.launch(authClient.getSignInIntent())
                                 }
-                            },
-                            onPlaylistClick = { playlistId ->
-                                _playerSource.value = PlayerSource.Playlist(playlistId)
-                                userPreferences.lastPlayedType = com.helloanwar.tubify.data.local.UserPreferences.TYPE_PLAYLIST
-                                userPreferences.lastPlayedId = playlistId
-                            },
-                            onSignInClick = {
-                                signInLauncher.launch(authClient.getSignInIntent())
-                            }
-                        )
+                            )
+                        }
                     }
                 }
             }
